@@ -59,3 +59,6 @@ typings/
 
 # next.js build output
 .next
+
+# compressed files for AWS Lambda
+*.zip
