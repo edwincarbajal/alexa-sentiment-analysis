@@ -1,0 +1,13 @@
+{
+  "name": "alexa-sentiment-analysis",
+  "version": "1.0.0",
+  "description": "An Alexa skill that uses Amazon Comprehend for sentiment analysis",
+  "main": "index.js",
+  "repository": "https://github.com/edwincarbajal/alexa-sentiment-analysis.git",
+  "author": "edwincarbajal <exaviercarbajal@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "ask-sdk-core": "^2.5.1",
+    "ask-sdk-model": "^1.15.0"
+  }
+}
