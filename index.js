@@ -1,5 +1,6 @@
 const Alexa = require('ask-sdk-core')
 const { getRequestType, getIntentName, getSlotValue } = require('ask-sdk-core')
+const AWS = require('aws-sdk')
 
 const LaunchRequestHandler = {
   canHandle(handlerInput) {
@@ -29,11 +30,24 @@ const RecordDayIntentHandler = {
        console.log("error : " + err);
     }
     try {
-      // Add a 5 second delay to test progressive response 
-      await sleep(5000);
+      const comprehend = new AWS.Comprehend()
+      const params = {
+        LanguageCode: 'en', /* required */
+        Text: entryValue /* required */
+      };
+      let sentiment = new Promise((resolve, reject) => {
+        comprehend.detectSentiment(params, function(err, data) {
+          if (err) {
+            console.log(err, err.stack) // an error occurred
+          } else {
+            resolve(data.Sentiment)
+          }
+        });
+      })
+      let result = await sentiment;
 
       return handlerInput.responseBuilder
-        .speak('Your analysis is complete and can be viewed online.')
+        .speak(`The sentiment of your day is ${result}.`)
         .getResponse();
     } catch (err) {
       console.log(`Error processing events request: ${err}`);
@@ -116,10 +130,6 @@ function callDirectiveService(handlerInput) {
     },
   };
   return directiveServiceClient.enqueue(directive, endpoint, token);
-}
-
-function sleep(milliseconds) {
-  return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
 exports.handler = Alexa.SkillBuilders.custom()
