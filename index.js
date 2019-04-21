@@ -163,7 +163,7 @@ exports.handler = Alexa.SkillBuilders.custom()
   .addRequestInterceptors(LaunchRequestInterceptor)
   .withApiClient(new Alexa.DefaultApiClient())
   .withPersistenceAdapter(new Adapter.DynamoDbPersistenceAdapter({
-    tableName: 'Users',
+    tableName: process.ENV.TABLE_NAME,
     createTable: true
   }))
   .lambda();
