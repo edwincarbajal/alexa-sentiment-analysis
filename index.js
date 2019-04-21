@@ -1,13 +1,32 @@
+const AWS = require('aws-sdk')
 const Alexa = require('ask-sdk-core')
 const { getRequestType, getIntentName, getSlotValue } = require('ask-sdk-core')
-const AWS = require('aws-sdk')
+const Adapter = require('ask-sdk-dynamodb-persistence-adapter');
+
+const LaunchRequestInterceptor = {
+  process(handlerInput) {
+    return new Promise(function(resolve, reject) {
+      let { userId } = handlerInput.requestEnvelope.session.user;
+
+      handlerInput.attributesManager.getPersistentAttributes()
+        .then(attributes => {
+          attributes.isNewUser = !attributes.hasCompletedProfile
+          resolve(handlerInput.attributesManager.setSessionAttributes(attributes))
+        })
+        .then(error => {
+          reject(error)
+        })
+    });
+  }
+}
 
 const LaunchRequestHandler = {
   canHandle(handlerInput) {
     return getRequestType(handlerInput.requestEnvelope) === 'LaunchRequest';
   },
   handle(handlerInput) {
-    const speechText = 'Welcome to Tone Analysis, you can tell me about your day. What would you like to do?';
+    let { isNewUser } = handlerInput.attributesManager.getSessionAttributes()
+    const speechText = isNewUser ? 'Welcome to Daily Sentiment. A place where you can inspect your daily frame of mind.' : 'Welcome back.'
 
     return handlerInput.responseBuilder
       .speak(speechText)
@@ -38,16 +57,16 @@ const RecordDayIntentHandler = {
       let sentiment = new Promise((resolve, reject) => {
         comprehend.detectSentiment(params, function(err, data) {
           if (err) {
-            console.log(err, err.stack) // an error occurred
+            reject(console.log(err, err.stack))
           } else {
-            resolve(data.Sentiment)
+            resolve(data)
           }
         });
       })
       let result = await sentiment;
 
       return handlerInput.responseBuilder
-        .speak(`The sentiment of your day is ${result}.`)
+        .speak(`The sentiment of your day is ${result.Sentiment}.`)
         .getResponse();
     } catch (err) {
       console.log(`Error processing events request: ${err}`);
@@ -135,11 +154,16 @@ function callDirectiveService(handlerInput) {
 exports.handler = Alexa.SkillBuilders.custom()
   .withSkillId(process.env.SKILL_ID)
   .addRequestHandlers(
-    LaunchRequestHandler,
-    RecordDayIntentHandler,
-    HelpIntentHandler,
     CancelAndStopIntentHandler,
+    LaunchRequestHandler,
+    HelpIntentHandler,
+    RecordDayIntentHandler,
     SessionEndedRequestHandler)
   .addErrorHandlers(ErrorHandler)
+  .addRequestInterceptors(LaunchRequestInterceptor)
   .withApiClient(new Alexa.DefaultApiClient())
+  .withPersistenceAdapter(new Adapter.DynamoDbPersistenceAdapter({
+    tableName: 'Users',
+    createTable: true
+  }))
   .lambda();
