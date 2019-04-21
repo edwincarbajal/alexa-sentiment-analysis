@@ -7,7 +7,7 @@ const LaunchRequestInterceptor = {
   process(handlerInput) {
     return new Promise(function(resolve, reject) {
       let { userId } = handlerInput.requestEnvelope.session.user;
-
+      
       handlerInput.attributesManager.getPersistentAttributes()
         .then(attributes => {
           attributes.isNewUser = !attributes.hasCompletedProfile
@@ -163,7 +163,7 @@ exports.handler = Alexa.SkillBuilders.custom()
   .addRequestInterceptors(LaunchRequestInterceptor)
   .withApiClient(new Alexa.DefaultApiClient())
   .withPersistenceAdapter(new Adapter.DynamoDbPersistenceAdapter({
-    tableName: process.ENV.TABLE_NAME,
+    tableName: process.env.TABLE_NAME,
     createTable: true
   }))
   .lambda();
