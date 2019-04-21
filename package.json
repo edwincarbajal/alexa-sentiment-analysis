@@ -8,6 +8,7 @@
   "license": "MIT",
   "dependencies": {
     "ask-sdk-core": "^2.5.1",
+    "ask-sdk-dynamodb-persistence-adapter": "^2.5.1",
     "ask-sdk-model": "^1.15.0"
   }
 }
