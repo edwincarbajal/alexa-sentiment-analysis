@@ -1,13 +1,22 @@
 const AWS = require('aws-sdk')
 const Alexa = require('ask-sdk-core')
-const { getRequestType, getIntentName, getSlotValue } = require('ask-sdk-core')
+const {
+  getRequestType,
+  getIntentName,
+  getSlotValue
+} = require('ask-sdk-core')
 const Adapter = require('ask-sdk-dynamodb-persistence-adapter');
+const PersistenceSavingResponseInterceptor = require('./interceptors/PersistenceSavingResponseInterceptor')
+const handlers = require('./handlers')
+const axios = require('axios')
 
 const LaunchRequestInterceptor = {
   process(handlerInput) {
     return new Promise(function(resolve, reject) {
-      let { userId } = handlerInput.requestEnvelope.session.user;
-      
+      const {
+        userId
+      } = handlerInput.requestEnvelope.session.user;
+
       handlerInput.attributesManager.getPersistentAttributes()
         .then(attributes => {
           attributes.isNewUser = !attributes.hasCompletedProfile
@@ -24,34 +33,77 @@ const LaunchRequestHandler = {
   canHandle(handlerInput) {
     return getRequestType(handlerInput.requestEnvelope) === 'LaunchRequest';
   },
-  handle(handlerInput) {
-    let { isNewUser } = handlerInput.attributesManager.getSessionAttributes()
-    const speechText = isNewUser ? 'Welcome to Daily Sentiment. A place where you can inspect your daily frame of mind.' : 'Welcome back.'
+  async handle(handlerInput) {
+    const {
+      attributesManager
+    } = handlerInput
+    const sessionAttributes = attributesManager.getSessionAttributes()
+    const {
+      isNewUser
+    } = attributesManager.getSessionAttributes()
+    const {
+      apiEndpoint,
+      apiAccessToken
+    } = handlerInput.requestEnvelope.context.System
 
-    return handlerInput.responseBuilder
-      .speak(speechText)
-      .reprompt('You can ask me to record your day')
-      .getResponse()
+    const headers = {
+      Authorization: `Bearer ${apiAccessToken}`,
+      "content-type": "application/json"
+    }
+    try {
+      await axios.all([
+          axios.get(apiEndpoint + process.env.GET_FULL_NAME, {
+            headers: headers
+          }),
+          axios.get(apiEndpoint + process.env.GET_EMAIL_ADDRESS, {
+            headers: headers
+          }),
+          axios.get(apiEndpoint + process.env.GET_PHONE_NUMBER, {
+            headers: headers
+          })
+        ])
+        .then(axios.spread(function(full_name, email, phone_number) {
+          sessionAttributes.name = full_name.data.split(' ')[0]
+          sessionAttributes.full_name = full_name.data
+          sessionAttributes.email = email.data
+          sessionAttributes.phone_number = phone_number.data
+        }))
+
+      return handlerInput.responseBuilder
+        .speak(`Hi ${sessionAttributes.name}. Glad to meet you. Welcome to Daily Sentiment. A place where you can inspect your daily frame of mind. Let's continue setting up your profile. What is your occupation? For example, you can say "student" or "Software Engineer".`)
+        .reprompt('I didn\'t catch that. What is your occupation?')
+        .getResponse()
+    } catch (error) {
+      return handlerInput.responseBuilder
+        .speak('Welcome to Daily Sentiment. Please enable profile permissions in the Amazon Alexa companion app for a personalized experienced.')
+        .withAskForPermissionsConsentCard([
+          "alexa::profile:name:read",
+          "alexa::profile:email:read",
+          "alexa::profile:mobile_number:read"
+        ])
+        .getResponse()
+    }
   }
 }
 
 const RecordDayIntentHandler = {
   canHandle(handlerInput) {
-    return getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
-      && getIntentName(handlerInput.requestEnvelope) === 'RecordDayIntent';
+    return getRequestType(handlerInput.requestEnvelope) === 'IntentRequest' &&
+      getIntentName(handlerInput.requestEnvelope) === 'RecordDayIntent';
   },
   async handle(handlerInput) {
     const entryValue = getSlotValue(handlerInput.requestEnvelope, 'entry');
 
     try {
       await callDirectiveService(handlerInput);
-    } catch(err) {
-       console.log("error : " + err);
+    } catch (err) {
+      console.log("error : " + err);
     }
     try {
       const comprehend = new AWS.Comprehend()
       const params = {
-        LanguageCode: 'en', /* required */
+        LanguageCode: 'en',
+        /* required */
         Text: entryValue /* required */
       };
       let sentiment = new Promise((resolve, reject) => {
@@ -77,60 +129,6 @@ const RecordDayIntentHandler = {
   }
 }
 
-const HelpIntentHandler = {
-  canHandle(handlerInput) {
-    return getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
-      && getIntentName(handlerInput.requestEnvelope) === 'AMAZON.HelpIntent';
-  },
-  handle(handlerInput) {
-    const speechText = 'You can ask me to record your day!';
-
-    return handlerInput.responseBuilder
-      .speak(speechText)
-      .reprompt(speechText)
-      .getResponse();
-  }
-}
-
-const CancelAndStopIntentHandler = {
-  canHandle(handlerInput) {
-    return getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
-      && (getIntentName(handlerInput.requestEnvelope) === 'AMAZON.CancelIntent'
-        || getIntentName(handlerInput.requestEnvelope) === 'AMAZON.StopIntent');
-  },
-  handle(handlerInput) {
-    const speechText = 'Goodbye!';
-
-    return handlerInput.responseBuilder
-      .speak(speechText)
-      .getResponse();
-  }
-}
-
-const SessionEndedRequestHandler = {
-  canHandle(handlerInput) {
-    return getRequestType(handlerInput.requestEnvelope) === 'SessionEndedRequest';
-  },
-  handle(handlerInput) {
-    //any cleanup logic goes here
-    return handlerInput.responseBuilder.getResponse();
-  }
-};
-
-const ErrorHandler = {
-  canHandle() {
-    return true;
-  },
-  handle(handlerInput, error) {
-    console.log(`Error handled: ${error.message}`);
-
-    return handlerInput.responseBuilder
-      .speak('Sorry, I can\'t understand the command. Please say again.')
-      .reprompt('Sorry, I can\'t understand the command. Please say again.')
-      .getResponse();
-  },
-};
-
 function callDirectiveService(handlerInput) {
   const requestEnvelope = handlerInput.requestEnvelope;
   const directiveServiceClient = handlerInput.serviceClientFactory.getDirectiveServiceClient();
@@ -143,9 +141,9 @@ function callDirectiveService(handlerInput) {
     header: {
       requestId,
     },
-    directive:{
-        type:"VoicePlayer.Speak",
-        speech:"Please wait a moment as I analyze your day."
+    directive: {
+      type: "VoicePlayer.Speak",
+      speech: "Please wait a moment as I analyze your day."
     },
   };
   return directiveServiceClient.enqueue(directive, endpoint, token);
@@ -154,13 +152,14 @@ function callDirectiveService(handlerInput) {
 exports.handler = Alexa.SkillBuilders.custom()
   .withSkillId(process.env.SKILL_ID)
   .addRequestHandlers(
-    CancelAndStopIntentHandler,
+    handlers.CancelAndStopIntentHandler,
     LaunchRequestHandler,
-    HelpIntentHandler,
+    handlers.HelpIntentHandler,
     RecordDayIntentHandler,
-    SessionEndedRequestHandler)
-  .addErrorHandlers(ErrorHandler)
+    handlers.SessionEndedRequestHandler)
+  .addErrorHandlers(handlers.ErrorHandler)
   .addRequestInterceptors(LaunchRequestInterceptor)
+  .addResponseInterceptors(PersistenceSavingResponseInterceptor)
   .withApiClient(new Alexa.DefaultApiClient())
   .withPersistenceAdapter(new Adapter.DynamoDbPersistenceAdapter({
     tableName: process.env.TABLE_NAME,
