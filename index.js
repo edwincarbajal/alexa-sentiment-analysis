@@ -13,13 +13,9 @@ const axios = require('axios')
 const LaunchRequestInterceptor = {
   process(handlerInput) {
     return new Promise(function(resolve, reject) {
-      const {
-        userId
-      } = handlerInput.requestEnvelope.session.user;
-
       handlerInput.attributesManager.getPersistentAttributes()
         .then(attributes => {
-          attributes.isNewUser = !attributes.hasCompletedProfile
+          attributes.isNewUser = attributes.hasCompletedProfile ? false : true
           resolve(handlerInput.attributesManager.setSessionAttributes(attributes))
         })
         .then(error => {
@@ -28,6 +24,68 @@ const LaunchRequestInterceptor = {
     });
   }
 }
+
+const StartedIncompleteProfileHandler = {
+  canHandle(handlerInput){
+    const request = handlerInput.requestEnvelope.request;
+    return request.type === 'IntentRequest' &&
+      request.intent.name === 'IncompleteProfileIntent' &&
+      request.dialogState === 'STARTED';
+  },
+  handle(handlerInput){
+    const currentIntent = handlerInput.requestEnvelope.request.intent;
+    let occupation = currentIntent.slots.occupation;
+
+    if (occupation.value === 'student') {
+      return handlerInput.responseBuilder
+        .speak('Which school do you attend?')
+        .addConfirmSlotDirective('school', currentIntent)
+        .getResponse()
+    } else {
+      return handlerInput.responseBuilder
+        .addDelegateDirective(currentIntent)
+        .getResponse();
+    }
+  }
+};
+
+const InProgressIncompleteProfileHandler = {
+  canHandle(handlerInput){
+    const request = handlerInput.requestEnvelope.request;
+    return request.type === 'IntentRequest' &&
+      request.intent.name === 'IncompleteProfileIntent' &&
+      request.dialogState === 'IN_PROGRESS';
+  },
+  handle(handlerInput){
+    const currentIntent = handlerInput.requestEnvelope.request.intent;
+    let school = currentIntent.slots.school;
+
+    return handlerInput.responseBuilder
+      .addDelegateDirective(currentIntent)
+      .getResponse();
+  }
+};
+
+const CompletedInCompleteProfileHandler = {
+  canHandle(handlerInput) {
+    const request = handlerInput.requestEnvelope.request;
+    return request.type === 'IntentRequest' &&
+      request.intent.name === 'IncompleteProfileIntent' &&
+      request.dialogState === 'COMPLETED';
+  },
+  handle(handlerInput) {
+    const { occupation } = handlerInput.requestEnvelope.request.intent.slots
+    const sessionAttributes = handlerInput.attributesManager.getSessionAttributes()
+    sessionAttributes.occupation = occupation.value
+    sessionAttributes.school = occupation.value === 'student' ? handlerInput.requestEnvelope.request.intent.slots.school.value : false
+    delete sessionAttributes.isNewUser
+    sessionAttributes.hasCompletedProfile = true
+    return handlerInput.responseBuilder
+      .speak('Great. How can I help today? You can ask me to record your day and give provided analysis.')
+      .reprompt('You can ask me to record you day.')
+      .getResponse()
+  },
+};
 
 const LaunchRequestHandler = {
   canHandle(handlerInput) {
@@ -38,6 +96,7 @@ const LaunchRequestHandler = {
       attributesManager
     } = handlerInput
     const sessionAttributes = attributesManager.getSessionAttributes()
+    const persistentAttributes = await attributesManager.getPersistentAttributes()
     const {
       isNewUser
     } = attributesManager.getSessionAttributes()
@@ -68,14 +127,20 @@ const LaunchRequestHandler = {
           sessionAttributes.email = email.data
           sessionAttributes.phone_number = phone_number.data
         }))
-
-      return handlerInput.responseBuilder
-        .speak(`Hi ${sessionAttributes.name}. Glad to meet you. Welcome to Daily Sentiment. A place where you can inspect your daily frame of mind. Let's continue setting up your profile. What is your occupation? For example, you can say "student" or "Software Engineer".`)
+      if(persistentAttributes.hasCompletedProfile)
+        return handlerInput.responseBuilder
+          .speak(`Hey ${sessionAttributes.name}, welcome back. You can ask me to record your day.`)
+          .reprompt('Ask me to record you day.')
+          .getResponse()
+      else {
+        return handlerInput.responseBuilder
+        .speak(`Hi ${sessionAttributes.name}. Glad to meet you. Welcome to Mood Tracker. A place where you can inspect your daily frame of mind. Before embarking together into your student life journey, I would like to know a little bit about you. What is your current occupation? For example, you can say "student" or "Software Engineer".`)
         .reprompt('I didn\'t catch that. What is your occupation?')
         .getResponse()
+      }
     } catch (error) {
       return handlerInput.responseBuilder
-        .speak('Welcome to Daily Sentiment. Please enable profile permissions in the Amazon Alexa companion app for a personalized experienced.')
+        .speak('Welcome to Mood Tracker. Please enable profile permissions in the Amazon Alexa companion app for a personalized experienced.')
         .withAskForPermissionsConsentCard([
           "alexa::profile:name:read",
           "alexa::profile:email:read",
@@ -116,9 +181,11 @@ const RecordDayIntentHandler = {
         });
       })
       let result = await sentiment;
+      let score = result.Sentiment.toLowerCase()
+      let firstLetter = score.charAt(0)
 
       return handlerInput.responseBuilder
-        .speak(`The sentiment of your day is ${result.Sentiment}.`)
+        .speak(`Okay. From my understanding, the sentiment of your day is ${result.Sentiment} and has a score of ${result.SentimentScore[ firstLetter.toUpperCase() + score.slice(1) ]}. Come back again.`)
         .getResponse();
     } catch (err) {
       console.log(`Error processing events request: ${err}`);
@@ -153,10 +220,13 @@ exports.handler = Alexa.SkillBuilders.custom()
   .withSkillId(process.env.SKILL_ID)
   .addRequestHandlers(
     handlers.CancelAndStopIntentHandler,
+    CompletedInCompleteProfileHandler,
+    InProgressIncompleteProfileHandler,
     LaunchRequestHandler,
     handlers.HelpIntentHandler,
     RecordDayIntentHandler,
-    handlers.SessionEndedRequestHandler)
+    handlers.SessionEndedRequestHandler,
+    StartedIncompleteProfileHandler)
   .addErrorHandlers(handlers.ErrorHandler)
   .addRequestInterceptors(LaunchRequestInterceptor)
   .addResponseInterceptors(PersistenceSavingResponseInterceptor)
