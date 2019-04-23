@@ -25,23 +25,6 @@ const LaunchRequestInterceptor = {
   }
 }
 
-const InProgressIncompleteProfileHandler = {
-  canHandle(handlerInput){
-    const request = handlerInput.requestEnvelope.request;
-    return request.type === 'IntentRequest' &&
-      request.intent.name === 'IncompleteProfileIntent' &&
-      request.dialogState === 'IN_PROGRESS';
-  },
-  handle(handlerInput){
-    const currentIntent = handlerInput.requestEnvelope.request.intent;
-    let school = currentIntent.slots.school;
-
-    return handlerInput.responseBuilder
-      .addDelegateDirective(currentIntent)
-      .getResponse();
-  }
-};
-
 const CompletedInCompleteProfileHandler = {
   canHandle(handlerInput) {
     const request = handlerInput.requestEnvelope.request;
@@ -197,7 +180,7 @@ exports.handler = Alexa.SkillBuilders.custom()
   .addRequestHandlers(
     handlers.CancelAndStopIntentHandler,
     CompletedInCompleteProfileHandler,
-    InProgressIncompleteProfileHandler,
+    handlers.InProgressIncompleteProfileHandler,
     LaunchRequestHandler,
     handlers.HelpIntentHandler,
     RecordDayIntentHandler,
