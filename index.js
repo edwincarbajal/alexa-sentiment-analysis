@@ -25,30 +25,6 @@ const LaunchRequestInterceptor = {
   }
 }
 
-const StartedIncompleteProfileHandler = {
-  canHandle(handlerInput){
-    const request = handlerInput.requestEnvelope.request;
-    return request.type === 'IntentRequest' &&
-      request.intent.name === 'IncompleteProfileIntent' &&
-      request.dialogState === 'STARTED';
-  },
-  handle(handlerInput){
-    const currentIntent = handlerInput.requestEnvelope.request.intent;
-    let occupation = currentIntent.slots.occupation;
-
-    if (occupation.value === 'student') {
-      return handlerInput.responseBuilder
-        .speak('Which school do you attend?')
-        .addConfirmSlotDirective('school', currentIntent)
-        .getResponse()
-    } else {
-      return handlerInput.responseBuilder
-        .addDelegateDirective(currentIntent)
-        .getResponse();
-    }
-  }
-};
-
 const InProgressIncompleteProfileHandler = {
   canHandle(handlerInput){
     const request = handlerInput.requestEnvelope.request;
@@ -226,7 +202,7 @@ exports.handler = Alexa.SkillBuilders.custom()
     handlers.HelpIntentHandler,
     RecordDayIntentHandler,
     handlers.SessionEndedRequestHandler,
-    StartedIncompleteProfileHandler)
+    handlers.StartedIncompleteProfileHandler)
   .addErrorHandlers(handlers.ErrorHandler)
   .addRequestInterceptors(LaunchRequestInterceptor)
   .addResponseInterceptors(PersistenceSavingResponseInterceptor)
