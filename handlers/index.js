@@ -1,6 +1,7 @@
 // Custom handlers
-const StartedIncompleteProfileHandler = require('./StartedIncompleteProfileHandler');
-const InProgressIncompleteProfileHandler = require('./InProgressIncompleteProfileHandler');
+const StartedInProgressProfileSetupIntentHandler = require('./StartedInProgressProfileSetupIntentHandler');
+const StudentOccupationGivenProfileSetupIntentHandler = require('./StudentOccupationGivenProfileSetupIntentHandler');
+const CompletedProfileSetupIntentHandler = require('./CompletedProfileSetupIntentHandler');
 
 // Built-in handlers
 const HelpIntentHandler = require('./HelpIntentHandler');
@@ -9,8 +10,9 @@ const SessionEndedRequestHandler = require('./SessionEndedRequestHandler');
 const ErrorHandler = require('./ErrorHandler');
 
 module.exports = {
-  StartedIncompleteProfileHandler,
-  InProgressIncompleteProfileHandler,
+  StartedInProgressProfileSetupIntentHandler,
+  StudentOccupationGivenProfileSetupIntentHandler,
+  CompletedProfileSetupIntentHandler,
   HelpIntentHandler,
   CancelAndStopIntentHandler,
   ErrorHandler,
