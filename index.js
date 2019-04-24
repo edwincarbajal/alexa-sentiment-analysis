@@ -1,91 +1,16 @@
-const AWS = require('aws-sdk')
-const Alexa = require('ask-sdk-core')
+const AWS = require('aws-sdk');
+const Alexa = require('ask-sdk-core');
 const {
   getRequestType,
   getIntentName,
   getSlotValue
-} = require('ask-sdk-core')
+} = require('ask-sdk-core');
 const Adapter = require('ask-sdk-dynamodb-persistence-adapter');
-const PersistenceSavingResponseInterceptor = require('./interceptors/PersistenceSavingResponseInterceptor')
-const handlers = require('./handlers')
-const axios = require('axios')
 
-const LaunchRequestInterceptor = {
-  process(handlerInput) {
-    return new Promise(function(resolve, reject) {
-      handlerInput.attributesManager.getPersistentAttributes()
-        .then(attributes => {
-          attributes.isNewUser = attributes.hasCompletedProfile ? false : true
-          resolve(handlerInput.attributesManager.setSessionAttributes(attributes))
-        })
-        .then(error => {
-          reject(error)
-        })
-    });
-  }
-}
+const handlers = require('./handlers');
+const interceptors = require('./interceptors');
 
-const StartedIncompleteProfileHandler = {
-  canHandle(handlerInput){
-    const request = handlerInput.requestEnvelope.request;
-    return request.type === 'IntentRequest' &&
-      request.intent.name === 'IncompleteProfileIntent' &&
-      request.dialogState === 'STARTED';
-  },
-  handle(handlerInput){
-    const currentIntent = handlerInput.requestEnvelope.request.intent;
-    let occupation = currentIntent.slots.occupation;
-
-    if (occupation.value === 'student') {
-      return handlerInput.responseBuilder
-        .speak('Which school do you attend?')
-        .addConfirmSlotDirective('school', currentIntent)
-        .getResponse()
-    } else {
-      return handlerInput.responseBuilder
-        .addDelegateDirective(currentIntent)
-        .getResponse();
-    }
-  }
-};
-
-const InProgressIncompleteProfileHandler = {
-  canHandle(handlerInput){
-    const request = handlerInput.requestEnvelope.request;
-    return request.type === 'IntentRequest' &&
-      request.intent.name === 'IncompleteProfileIntent' &&
-      request.dialogState === 'IN_PROGRESS';
-  },
-  handle(handlerInput){
-    const currentIntent = handlerInput.requestEnvelope.request.intent;
-    let school = currentIntent.slots.school;
-
-    return handlerInput.responseBuilder
-      .addDelegateDirective(currentIntent)
-      .getResponse();
-  }
-};
-
-const CompletedInCompleteProfileHandler = {
-  canHandle(handlerInput) {
-    const request = handlerInput.requestEnvelope.request;
-    return request.type === 'IntentRequest' &&
-      request.intent.name === 'IncompleteProfileIntent' &&
-      request.dialogState === 'COMPLETED';
-  },
-  handle(handlerInput) {
-    const { occupation } = handlerInput.requestEnvelope.request.intent.slots
-    const sessionAttributes = handlerInput.attributesManager.getSessionAttributes()
-    sessionAttributes.occupation = occupation.value
-    sessionAttributes.school = occupation.value === 'student' ? handlerInput.requestEnvelope.request.intent.slots.school.value : false
-    delete sessionAttributes.isNewUser
-    sessionAttributes.hasCompletedProfile = true
-    return handlerInput.responseBuilder
-      .speak('Great. How can I help today? You can ask me to record your day and give provided analysis.')
-      .reprompt('You can ask me to record you day.')
-      .getResponse()
-  },
-};
+const axios = require('axios');
 
 const LaunchRequestHandler = {
   canHandle(handlerInput) {
@@ -220,16 +145,16 @@ exports.handler = Alexa.SkillBuilders.custom()
   .withSkillId(process.env.SKILL_ID)
   .addRequestHandlers(
     handlers.CancelAndStopIntentHandler,
-    CompletedInCompleteProfileHandler,
-    InProgressIncompleteProfileHandler,
+    handlers.CompletedProfileSetupIntentHandler,
+    handlers.StudentOccupationGivenProfileSetupIntentHandler,
     LaunchRequestHandler,
     handlers.HelpIntentHandler,
     RecordDayIntentHandler,
     handlers.SessionEndedRequestHandler,
-    StartedIncompleteProfileHandler)
+    handlers.StartedInProgressProfileSetupIntent)
   .addErrorHandlers(handlers.ErrorHandler)
-  .addRequestInterceptors(LaunchRequestInterceptor)
-  .addResponseInterceptors(PersistenceSavingResponseInterceptor)
+  .addRequestInterceptors(interceptors.LaunchRequestInterceptor)
+  .addResponseInterceptors(interceptors.PersistenceSavingResponseInterceptor)
   .withApiClient(new Alexa.DefaultApiClient())
   .withPersistenceAdapter(new Adapter.DynamoDbPersistenceAdapter({
     tableName: process.env.TABLE_NAME,
