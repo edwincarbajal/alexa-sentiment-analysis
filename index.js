@@ -10,8 +10,6 @@ const Adapter = require('ask-sdk-dynamodb-persistence-adapter');
 const handlers = require('./handlers');
 const interceptors = require('./interceptors');
 
-const axios = require('axios');
-
 const LaunchRequestHandler = {
   canHandle(handlerInput) {
     return getRequestType(handlerInput.requestEnvelope) === 'LaunchRequest';
