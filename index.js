@@ -9,20 +9,17 @@ const Adapter = require('ask-sdk-dynamodb-persistence-adapter');
 
 const handlers = require('./handlers');
 const interceptors = require('./interceptors');
+const progressiveResponseHelper = require('./helpers/CallDirectiveService')
 
 const LaunchRequestHandler = {
   canHandle(handlerInput) {
     return getRequestType(handlerInput.requestEnvelope) === 'LaunchRequest';
   },
   async handle(handlerInput) {
-    const {
-      attributesManager
-    } = handlerInput
+    const { attributesManager } = handlerInput
     const sessionAttributes = attributesManager.getSessionAttributes()
     const persistentAttributes = await attributesManager.getPersistentAttributes()
-    const {
-      isNewUser
-    } = attributesManager.getSessionAttributes()
+    const { isNewUser } = attributesManager.getSessionAttributes()
     const {
       apiEndpoint,
       apiAccessToken
@@ -83,7 +80,7 @@ const RecordDayIntentHandler = {
     const entryValue = getSlotValue(handlerInput.requestEnvelope, 'entry');
 
     try {
-      await callDirectiveService(handlerInput);
+      await progressiveResponseHelper.callDirectiveService(handlerInput);
     } catch (err) {
       console.log("error : " + err);
     }
@@ -117,26 +114,6 @@ const RecordDayIntentHandler = {
         .getResponse();
     }
   }
-}
-
-function callDirectiveService(handlerInput) {
-  const requestEnvelope = handlerInput.requestEnvelope;
-  const directiveServiceClient = handlerInput.serviceClientFactory.getDirectiveServiceClient();
-
-  const requestId = requestEnvelope.request.requestId;
-  const endpoint = requestEnvelope.context.System.apiEndpoint;
-  const token = requestEnvelope.context.System.apiAccessToken;
-
-  const directive = {
-    header: {
-      requestId,
-    },
-    directive: {
-      type: "VoicePlayer.Speak",
-      speech: "Please wait a moment as I analyze your day."
-    },
-  };
-  return directiveServiceClient.enqueue(directive, endpoint, token);
 }
 
 exports.handler = Alexa.SkillBuilders.custom()
