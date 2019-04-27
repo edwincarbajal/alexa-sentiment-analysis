@@ -107,7 +107,7 @@ exports.handler = Alexa.SkillBuilders.custom()
   .addRequestHandlers(
     handlers.CancelAndStopIntentHandler,
     LaunchRequestHandler,
-    handlers.StartedInProgressProfileSetupIntent,
+    handlers.StartedInProgressProfileSetupIntentHandler,
     handlers.StudentOccupationGivenProfileSetupIntentHandler,
     handlers.HelpIntentHandler,
     RecordDayIntentHandler,
