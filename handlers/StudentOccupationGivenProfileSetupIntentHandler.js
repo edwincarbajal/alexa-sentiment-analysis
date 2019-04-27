@@ -1,7 +1,8 @@
 const {
   getRequestType,
   getIntentName,
-  getSlotValue
+  getSlotValue,
+  getDialogState
 } = require('ask-sdk-core');
 
 module.exports = {

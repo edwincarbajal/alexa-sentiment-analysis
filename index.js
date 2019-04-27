@@ -9,8 +9,7 @@ const Adapter = require('ask-sdk-dynamodb-persistence-adapter');
 
 const handlers = require('./handlers');
 const interceptors = require('./interceptors');
-
-const axios = require('axios');
+const progressiveResponseHelper = require('./helpers/CallDirectiveService')
 
 const LaunchRequestHandler = {
   canHandle(handlerInput) {
@@ -18,59 +17,41 @@ const LaunchRequestHandler = {
   },
   async handle(handlerInput) {
     const {
-      attributesManager
-    } = handlerInput
-    const sessionAttributes = attributesManager.getSessionAttributes()
-    const persistentAttributes = await attributesManager.getPersistentAttributes()
-    const {
-      isNewUser
-    } = attributesManager.getSessionAttributes()
-    const {
-      apiEndpoint,
-      apiAccessToken
-    } = handlerInput.requestEnvelope.context.System
+      serviceClientFactory,
+      attributesManager,
+      requestEnvelope
+    } = handlerInput;
+    const upsServiceClient = serviceClientFactory.getUpsServiceClient();
+    const persistentAttributes = await attributesManager.getPersistentAttributes();
 
-    const headers = {
-      Authorization: `Bearer ${apiAccessToken}`,
-      "content-type": "application/json"
+    const consentToken = requestEnvelope.context.System.user.permissions &&
+      requestEnvelope.context.System.user.permissions.consentToken;
+
+    if (!consentToken) {
+      return handlerInput.responseBuilder
+        .speak('Please enable Name permissions in the Amazon Alexa app.')
+        .withAskForPermissionsConsentCard(['alexa::profile:given_name:read'])
+        .getResponse();
     }
+
     try {
-      await axios.all([
-          axios.get(apiEndpoint + process.env.GET_FULL_NAME, {
-            headers: headers
-          }),
-          axios.get(apiEndpoint + process.env.GET_EMAIL_ADDRESS, {
-            headers: headers
-          }),
-          axios.get(apiEndpoint + process.env.GET_PHONE_NUMBER, {
-            headers: headers
-          })
-        ])
-        .then(axios.spread(function(full_name, email, phone_number) {
-          sessionAttributes.name = full_name.data.split(' ')[0]
-          sessionAttributes.full_name = full_name.data
-          sessionAttributes.email = email.data
-          sessionAttributes.phone_number = phone_number.data
-        }))
-      if(persistentAttributes.hasCompletedProfile)
+      const profileGivenName = await upsServiceClient.getProfileGivenName();
+
+      if (persistentAttributes.hasCompletedProfile)
         return handlerInput.responseBuilder
-          .speak(`Hey ${sessionAttributes.name}, welcome back. You can ask me to record your day.`)
+          .speak(`Hey ${profileGivenName}, welcome back. You can ask me to record your day.`)
           .reprompt('Ask me to record you day.')
           .getResponse()
       else {
         return handlerInput.responseBuilder
-        .speak(`Hi ${sessionAttributes.name}. Glad to meet you. Welcome to Mood Tracker. A place where you can inspect your daily frame of mind. Before embarking together into your student life journey, I would like to know a little bit about you. What is your current occupation? For example, you can say "student" or "Software Engineer".`)
-        .reprompt('I didn\'t catch that. What is your occupation?')
-        .getResponse()
+          .speak(`Hi ${profileGivenName}. Glad to meet you. Welcome to Mood Tracker. A place where you can inspect your daily frame of mind. Before embarking together into your student life journey, I would like to know a little bit about you. What is your current occupation? For example, you can say "student" or "Software Engineer".`)
+          .reprompt('I didn\'t catch that. What is your occupation?')
+          .getResponse()
       }
     } catch (error) {
       return handlerInput.responseBuilder
         .speak('Welcome to Mood Tracker. Please enable profile permissions in the Amazon Alexa companion app for a personalized experienced.')
-        .withAskForPermissionsConsentCard([
-          "alexa::profile:name:read",
-          "alexa::profile:email:read",
-          "alexa::profile:mobile_number:read"
-        ])
+        .withAskForPermissionsConsentCard(['alexa::profile:given_name:read'])
         .getResponse()
     }
   }
@@ -85,7 +66,7 @@ const RecordDayIntentHandler = {
     const entryValue = getSlotValue(handlerInput.requestEnvelope, 'entry');
 
     try {
-      await callDirectiveService(handlerInput);
+      await progressiveResponseHelper.callDirectiveService(handlerInput);
     } catch (err) {
       console.log("error : " + err);
     }
@@ -121,37 +102,17 @@ const RecordDayIntentHandler = {
   }
 }
 
-function callDirectiveService(handlerInput) {
-  const requestEnvelope = handlerInput.requestEnvelope;
-  const directiveServiceClient = handlerInput.serviceClientFactory.getDirectiveServiceClient();
-
-  const requestId = requestEnvelope.request.requestId;
-  const endpoint = requestEnvelope.context.System.apiEndpoint;
-  const token = requestEnvelope.context.System.apiAccessToken;
-
-  const directive = {
-    header: {
-      requestId,
-    },
-    directive: {
-      type: "VoicePlayer.Speak",
-      speech: "Please wait a moment as I analyze your day."
-    },
-  };
-  return directiveServiceClient.enqueue(directive, endpoint, token);
-}
-
 exports.handler = Alexa.SkillBuilders.custom()
   .withSkillId(process.env.SKILL_ID)
   .addRequestHandlers(
     handlers.CancelAndStopIntentHandler,
-    handlers.CompletedProfileSetupIntentHandler,
-    handlers.StudentOccupationGivenProfileSetupIntentHandler,
     LaunchRequestHandler,
+    handlers.StartedInProgressProfileSetupIntentHandler,
+    handlers.StudentOccupationGivenProfileSetupIntentHandler,
     handlers.HelpIntentHandler,
     RecordDayIntentHandler,
     handlers.SessionEndedRequestHandler,
-    handlers.StartedInProgressProfileSetupIntent)
+    handlers.CompletedProfileSetupIntentHandler)
   .addErrorHandlers(handlers.ErrorHandler)
   .addRequestInterceptors(interceptors.LaunchRequestInterceptor)
   .addResponseInterceptors(interceptors.PersistenceSavingResponseInterceptor)
