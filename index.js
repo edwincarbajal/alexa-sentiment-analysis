@@ -63,6 +63,7 @@ const RecordDayIntentHandler = {
       getIntentName(handlerInput.requestEnvelope) === 'RecordDayIntent';
   },
   async handle(handlerInput) {
+    const persistentAttributes = await handlerInput.attributesManager.getPersistentAttributes();
     const entryValue = getSlotValue(handlerInput.requestEnvelope, 'entry');
 
     try {
@@ -86,17 +87,28 @@ const RecordDayIntentHandler = {
           }
         });
       })
-      let result = await sentiment;
-      let score = result.Sentiment.toLowerCase()
-      let firstLetter = score.charAt(0)
+      const result = await sentiment;
+      const sentimentValueFormatted = result.Sentiment.toLowerCase();
+      const sentimentValueFirstLetter = sentimentValueFormatted.charAt(0).toUpperCase();
+      const formattedSentimentValue = sentimentValueFirstLetter + sentimentValueFormatted.slice(1);
+      const roundedSentimentScore = Number.parseFloat(result.SentimentScore[formattedSentimentValue]).toFixed(2);
+
+      persistentAttributes.entries = [{
+        data: {
+          input: entryValue,
+          sentiment: formattedSentimentValue,
+          sentimentScore: result.SentimentScore
+        },
+        created_at: new Date().toISOString()
+      },
+        ...persistentAttributes.entries]
 
       return handlerInput.responseBuilder
-        .speak(`Okay. From my understanding, the sentiment of your day is ${result.Sentiment} and has a score of ${result.SentimentScore[ firstLetter.toUpperCase() + score.slice(1) ]}. Come back again.`)
+        .speak(`Okay, I saved your entry with a sentiment of ${formattedSentimentValue} and a score of ${roundedSentimentScore}. Come back again.`)
         .getResponse();
     } catch (err) {
-      console.log(`Error processing events request: ${err}`);
       return handlerInput.responseBuilder
-        .speak('error')
+        .speak('Uh-oh. There was an error processing the request. Please try again later.')
         .getResponse();
     }
   }
