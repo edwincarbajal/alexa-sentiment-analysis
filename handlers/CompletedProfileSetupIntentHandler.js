@@ -11,19 +11,16 @@ module.exports = {
       getIntentName(handlerInput.requestEnvelope) === 'ProfileSetupIntent' &&
       getDialogState(handlerInput.requestEnvelope) === 'COMPLETED';
   },
-  handle(handlerInput) {
+  async handle(handlerInput) {
     const occupationSlotValue = getSlotValue(handlerInput.requestEnvelope, 'occupation');
     const schoolSlotValue = getSlotValue(handlerInput.requestEnvelope, 'school');
+    const persistentAttributes = await handlerInput.attributesManager.getPersistentAttributes();
 
-    const sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+    persistentAttributes.hasCompletedProfile = occupationSlotValue || occupationSlotValue === 'student' && schoolSlotValue ? true : false
+    persistentAttributes.occupation = occupationSlotValue
+    persistentAttributes.school = occupationSlotValue === 'student' ? schoolSlotValue : false
 
-    delete sessionAttributes.isNewUser;
-    sessionAttributes.hasCompletedProfile = true;
-    sessionAttributes.profile = {
-      occupation: occupationSlotValue,
-      school: occupationSlotValue === 'student' ? schoolSlotValue : false
-    }
-    handlerInput.attributesManager.setSessionAttributes(sessionAttributes);
+    handlerInput.attributesManager.setPersistentAttributes(persistentAttributes);
 
     return handlerInput.responseBuilder
       .speak('Great. How can I help today? You can ask me to record your day and provide an analysis.')

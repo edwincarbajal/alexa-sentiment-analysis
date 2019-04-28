@@ -3,7 +3,7 @@ module.exports = {
     return new Promise(function(resolve, reject) {
       handlerInput.attributesManager.getPersistentAttributes()
         .then(attributes => {
-          attributes.isNewUser = attributes.hasCompletedProfile ? false : true
+          attributes.entries ? null : attributes.entries = []
           resolve(handlerInput.attributesManager.setSessionAttributes(attributes))
         })
         .then(error => {
